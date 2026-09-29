@@ -5,11 +5,30 @@ export type Priority = "Hot" | "Warm" | "Cold";
 // What the salesperson types into the intake form
 export interface LeadInput {
   name: string;
+  phone: string; // optional; never sent to the AI
+  email: string; // optional; never sent to the AI
   location: string;
   requirement: string;
   budget: string;
   timeline: string;
-  message: string;
+  message: string; // the customer's own words
+}
+
+// One signal of the transparent score, e.g. "Budget clarity 18/20"
+export interface ScoreSignal {
+  key: string;
+  label: string;
+  points: number;
+  max: number;
+  note: string;
+}
+
+// Our own feature: HOW to act on the lead (the analysis says WHAT the lead looks like)
+export interface ActionPlan {
+  immediateAction: string;
+  questionsToAsk: string[];
+  talkingPoints: string[];
+  followUp: string;
 }
 
 // What the AI sends back about a lead
@@ -20,9 +39,13 @@ export interface Analysis {
   objections: string[];
   nextAction: string;
   suggestedResponse: string;
-  score: number; // 0-100, produced by the AI using our scoring rubric
-  scoreReason: string; // one line: why this score
-  priority: Priority; // derived from the score by OUR code, not the AI
+  score: number; // 0-100 = sum of the AI's signal points minus the objection penalty (added up by OUR code)
+  scoreReason: string; // why this priority, in plain words
+  priority: Priority; // derived from the score by OUR code, so labels are always consistent
+  // optional: leads saved before these existed don't have them (they can be re-analyzed)
+  scoreBreakdown?: ScoreSignal[];
+  objectionPenalty?: number;
+  actionPlan?: ActionPlan;
 }
 
 export interface ChatMessage {
@@ -30,7 +53,7 @@ export interface ChatMessage {
   content: string;
 }
 
-// Our own feature: a record of each call the salesperson logs
+// A record of each call the salesperson logs ("After the call" re-scoring)
 export interface CallLog {
   id: string;
   date: string;
@@ -48,3 +71,16 @@ export interface Lead extends LeadInput {
   chat: ChatMessage[];
   calls: CallLog[];
 }
+
+// Dashboard numbers, calculated by the backend with SQL
+export interface Stats {
+  total: number;
+  avgScore: number;
+  byPriority: Record<Priority, number>;
+  byTimeline: { label: string; count: number }[];
+  scoreBuckets: { label: string; count: number }[];
+  perDay: { date: string; count: number }[];
+  calls: { count: number; avgScoreChange: number };
+}
+
+export type SortKey = "score" | "newest" | "urgent";

@@ -1,5 +1,5 @@
 "use client";
-// OUR OWN FEATURE: "After the call" update.
+// Extra feature: "After the call" update.
 // The salesperson pastes what happened on the call; the AI re-scores the lead and updates the plan.
 import { useState } from "react";
 import type { Lead } from "@/lib/types";
@@ -29,7 +29,7 @@ export default function CallLogger({ lead, onChange }: { lead: Lead; onChange: (
     <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-sm">
       <h3 className="font-semibold text-slate-900">📞 After the call: update this lead</h3>
       <p className="mb-3 text-xs text-slate-600">
-        Paste your call notes or the call transcript. AI re-scores the lead and rewrites the next action and reply.
+        Paste your call notes or the call transcript. AI re-scores the lead and rewrites the next action, the Sales Action Plan and the reply.
       </p>
       <textarea
         value={notes}

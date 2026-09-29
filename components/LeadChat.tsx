@@ -1,21 +1,30 @@
 "use client";
 // Chat about ONE lead. The server answers using that lead's full context and saves the conversation.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Lead } from "@/lib/types";
 import { api } from "@/lib/client";
+import RichText from "./RichText";
 
 const QUICK_QUESTIONS = [
   "What should I emphasize on the call?",
   "Make my reply more assertive",
-  "How do I handle their main objection?",
+  "What information should I ask the customer for?",
+  "Why is this lead considered {priority}?",
+  "What could prevent this customer from buying?",
+  "Give me a short call script",
 ];
 
 export default function LeadChat({ lead, onChange }: { lead: Lead; onChange: (lead: Lead) => void }) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-
   const [pending, setPending] = useState(""); // the question being answered right now
+  const bottom = useRef<HTMLDivElement>(null);
+
+  // keep the newest message in view
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ block: "nearest" });
+  }, [lead.chat.length, pending]);
 
   async function send(text: string) {
     const question = text.trim();
@@ -26,68 +35,81 @@ export default function LeadChat({ lead, onChange }: { lead: Lead; onChange: (le
     setError("");
     try {
       // the server saves the question + answer in the database and returns the updated lead
-      onChange(await api<Lead>("POST", `/leads/${lead.id}/chat`, { message: question }));
+      onChange(await api<Lead>("POST", `/leads/${lead.id}/chat`, { question }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
+      setInput(question); // give the question back so it can be retried
     } finally {
       setPending("");
       setBusy(false);
     }
   }
 
+  const priority = lead.analysis.priority.toLowerCase();
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="font-semibold text-slate-900">Ask AI about {lead.name}</h3>
-      <p className="mb-3 text-xs text-slate-500">Answers use this lead&apos;s details, analysis and call history.</p>
+      <h3 className="font-semibold text-slate-900">💬 Ask AI about {lead.name}</h3>
+      <p className="mb-3 text-xs text-slate-500">
+        Every answer uses this lead&apos;s details, message, AI analysis, action plan and call history. The conversation is saved with the lead.
+      </p>
 
-      <div className="mb-3 max-h-80 space-y-3 overflow-y-auto">
-        {lead.chat.map((m, i) => (
-          <div
-            key={i}
-            className={`whitespace-pre-wrap rounded-xl px-3 py-2 text-sm ${
-              m.role === "user" ? "ml-8 bg-indigo-600 text-white" : "mr-8 bg-slate-100 text-slate-800"
-            }`}
-          >
-            {m.content}
-          </div>
-        ))}
-        {pending && <div className="ml-8 whitespace-pre-wrap rounded-xl bg-indigo-600 px-3 py-2 text-sm text-white">{pending}</div>}
-        {busy && <div className="mr-8 rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-500">Thinking...</div>}
-      </div>
+      {(lead.chat.length > 0 || pending) && (
+        <div className="mb-3 max-h-[28rem] space-y-3 overflow-y-auto rounded-xl bg-slate-50 p-3">
+          {lead.chat.map((m, i) =>
+            m.role === "user" ? (
+              <div key={i} className="ml-10 whitespace-pre-wrap rounded-xl bg-indigo-600 px-3 py-2 text-sm text-white">
+                {m.content}
+              </div>
+            ) : (
+              <div key={i} className="mr-6 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800">
+                <RichText text={m.content} />
+              </div>
+            )
+          )}
+          {pending && <div className="ml-10 whitespace-pre-wrap rounded-xl bg-indigo-600 px-3 py-2 text-sm text-white">{pending}</div>}
+          {busy && <div className="mr-6 animate-pulse rounded-xl bg-white px-3 py-2 text-sm text-slate-500">Thinking about {lead.name}...</div>}
+          <div ref={bottom} />
+        </div>
+      )}
 
       {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
 
-      <div className="mb-2 flex flex-wrap gap-2">
-        {QUICK_QUESTIONS.map((q) => (
-          <button
-            key={q}
-            type="button"
-            onClick={() => send(q)}
-            disabled={busy}
-            className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-indigo-300 hover:text-indigo-700 disabled:opacity-50"
-          >
-            {q}
-          </button>
-        ))}
+      <div className="mb-3 flex flex-wrap gap-2">
+        {QUICK_QUESTIONS.map((template) => {
+          const q = template.replace("{priority}", priority);
+          return (
+            <button
+              key={template}
+              type="button"
+              onClick={() => send(q)}
+              disabled={busy}
+              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-indigo-300 hover:text-indigo-700 disabled:opacity-50"
+            >
+              {q}
+            </button>
+          );
+        })}
       </div>
 
-      <div className="flex gap-2">
+      <form
+        className="flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          send(input);
+        }}
+      >
         <input
           value={input}
+          maxLength={1000}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send(input)}
-          placeholder="Ask a follow-up question..."
+          placeholder={`Ask anything about ${lead.name}...`}
           className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none"
         />
-        <button
-          type="button"
-          onClick={() => send(input)}
-          disabled={busy || !input.trim()}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:bg-slate-300"
-        >
+        <button type="submit" disabled={busy || !input.trim()} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:bg-slate-300">
           Send
         </button>
-      </div>
+      </form>
     </div>
   );
 }

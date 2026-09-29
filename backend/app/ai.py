@@ -36,6 +36,8 @@ def call_ai(messages: list[dict], want_json: bool = False) -> str:
 
     if res.status_code == 429:
         raise AIError("The AI is busy (free-tier rate limit). Wait a few seconds and try again.")
+    if res.status_code == 400 and "json_validate_failed" in res.text:
+        raise AIError("The AI response was not valid JSON. Please try again.")
     if res.status_code >= 400:
         raise AIError(f"AI request failed ({res.status_code}): {res.text[:200]}")
 
@@ -57,3 +59,13 @@ def parse_json(text: str) -> dict:
             except json.JSONDecodeError:
                 pass
     raise AIError("The AI response was not valid JSON. Please try again.")
+
+
+def call_ai_json(messages: list[dict]) -> dict:
+    """Structured call: asks for JSON and retries once if the model returns something unparseable."""
+    try:
+        return parse_json(call_ai(messages, want_json=True))
+    except AIError as exc:
+        if "not valid JSON" not in str(exc):
+            raise
+        return parse_json(call_ai(messages, want_json=True))

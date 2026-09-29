@@ -1,7 +1,7 @@
 "use client";
 // The left-hand list: every saved lead, grouped Hot / Warm / Cold and sorted by score.
 import type { Lead, Priority } from "@/lib/types";
-import { PRIORITY_STYLES } from "@/lib/client";
+import { PRIORITY_STYLES, SAMPLE_LEADS } from "@/lib/client";
 
 const GROUPS: Priority[] = ["Hot", "Warm", "Cold"];
 
@@ -28,7 +28,7 @@ export default function LeadList({
           disabled={busy}
           className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
         >
-          {busy ? "Analyzing demo leads..." : "Load 3 demo leads"}
+          {busy ? "Analyzing demo leads..." : `Load ${SAMPLE_LEADS.length} demo leads`}
         </button>
       </div>
     );

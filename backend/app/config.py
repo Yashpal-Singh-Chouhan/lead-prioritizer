@@ -19,3 +19,8 @@ DATABASE_URL = _raw_db_url.replace("postgresql://", "postgresql+psycopg://", 1).
 ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if o.strip()
 ]
+
+# Secret used to sign login tokens. MUST be set to a long random value in production.
+JWT_SECRET = os.getenv("JWT_SECRET", "dev-only-secret-change-me")
+TOKEN_HOURS = int(os.getenv("TOKEN_HOURS", "12"))
+DEMO_EMAIL = "demo@leadprioritizer.app"
