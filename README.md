@@ -1,7 +1,7 @@
 # Lead Prioritizer — AI lead triage for real-estate sales teams
 
-**Live app (Vercel):** _add link_
-**Backend API (FastAPI in Docker on Render):** _add link_ (free tier sleeps; first load can take ~50s)
+**Live app (Vercel):** https://lead-prioritizer.vercel.app (use "Try the demo account" to log in instantly)
+**Backend API (FastAPI in Docker on Render):** https://lead-prioritizer-api.onrender.com (interactive docs at [/docs](https://lead-prioritizer-api.onrender.com/docs)) (free tier sleeps; first load can take ~50s)
 **Demo video:** _add link_
 
 ## What I built
@@ -163,4 +163,5 @@ docker run -p 8000:8000 --env-file .env lead-prioritizer-api
 
 ## AI usage disclosure
 
-_Fill in honestly, e.g.:_ Claude (Anthropic) as a mentor to plan the architecture, generate and explain the Next.js frontend and FastAPI backend code, write prompts, the Dockerfile and a README draft. I reviewed, ran and tested every part, and can explain each file.
+- **Building the app:** I used Claude Code (Anthropic's AI coding assistant) throughout: to plan the architecture, write and explain the Next.js frontend and FastAPI backend, design the AI prompts and JSON schema, write the Dockerfile and this README, debug deployment issues, and record and edit the walkthrough video. I directed the work, reviewed the code, ran and tested the app, and can explain every file.
+- **Inside the app:** lead analysis, the Sales Action Plan, lead chat and re-scoring after a call use `openai/gpt-oss-120b` via the Groq API, called only from the backend. All the AI output is validated JSON; the lead score itself is added up in Python from the AI's per-signal ratings.
