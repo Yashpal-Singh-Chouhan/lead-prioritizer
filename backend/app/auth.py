@@ -21,10 +21,9 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from .config import DEMO_ACCOUNTS, DEMO_TEAM_ID, JWT_SECRET, TOKEN_HOURS
-from .db import AuthToken, Lead, SessionLocal, Team, User, new_join_code, now
+from .db import AuthToken, SessionLocal, Team, User, new_join_code, now
 from .emails import EmailError, send_reset_email, send_verification_email
 from .ratelimit import rate_limit
-from .realtime import broker
 
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 DEMO_EMAILS = {email for email, _ in DEMO_ACCOUNTS.values()}
@@ -88,7 +87,7 @@ class SignupIn(BaseModel):
     @field_validator("join_code")
     @classmethod
     def check_join_code(cls, v: str) -> str:
-        return _clean_join_code(v)
+        return "".join(ch for ch in v.upper() if ch.isalnum())  # forgive spaces, dashes and lowercase
 
     @model_validator(mode="after")
     def one_team_choice(self):
@@ -99,19 +98,9 @@ class SignupIn(BaseModel):
         return self
 
 
-def _clean_join_code(v: str) -> str:
-    return "".join(ch for ch in v.upper() if ch.isalnum())  # forgive spaces, dashes and lowercase
-
-
 class LoginIn(BaseModel):
     email: str = Field(max_length=254)
     password: str = Field(min_length=1, max_length=72)
-    join_code: str = Field(default="", max_length=20)  # optional: also join a teammate's team
-
-    @field_validator("join_code")
-    @classmethod
-    def check_join_code(cls, v: str) -> str:
-        return _clean_join_code(v)
 
 
 class EmailIn(BaseModel):
@@ -308,37 +297,6 @@ def resend_verification(data: EmailIn, background: BackgroundTasks, db: Session 
     return {"message": CHECK_INBOX}
 
 
-def move_to_team(db: Session, user: User, join_code: str) -> None:
-    """Moves a salesperson into a teammate's team, using that team's invite code.
-    Their claims in the old team are released. If nobody else is left in the old team,
-    its leads come along, so a solo user who joins a team doesn't lose their work."""
-    team = db.scalar(select(Team).where(Team.join_code == join_code))
-    if not team or team.id == DEMO_TEAM_ID:
-        raise HTTPException(status_code=400, detail="No team has this invite code. Ask a teammate to check it.")
-    if team.id == user.team_id:
-        return  # already in this team: just log in
-
-    old_team_id = user.team_id
-    db.execute(
-        update(Lead)
-        .where(Lead.team_id == old_team_id, Lead.claimed_by_id == user.id)
-        .values(claimed_by_id=None, claimed_at=None)
-    )
-    others_left = db.scalar(select(User.id).where(User.team_id == old_team_id, User.id != user.id).limit(1))
-    moved = 0
-    if old_team_id and not others_left:
-        moved = db.execute(update(Lead).where(Lead.team_id == old_team_id).values(team_id=team.id)).rowcount
-    user.team_id = team.id
-    db.commit()
-
-    # open screens reload their lists: the old team sees the released claims, the new team any moved leads
-    if old_team_id:
-        broker.publish(old_team_id, {"type": "resync"})
-    if moved:
-        broker.publish(team.id, {"type": "resync"})
-    db.refresh(user)
-
-
 @router.post("/login", dependencies=[Depends(auth_limit)])
 def login(data: LoginIn, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == data.email.strip().lower()))
@@ -347,8 +305,6 @@ def login(data: LoginIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Wrong email or password.")
     if not user.email_verified:
         raise HTTPException(status_code=403, detail="Please confirm your email first: click the link we sent you.")
-    if data.join_code:
-        move_to_team(db, user, data.join_code)
     return make_token(user)
 
 

@@ -22,8 +22,6 @@ function Login() {
   const { ready, session } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [joinCode, setJoinCode] = useState("");
-  const [showJoin, setShowJoin] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -105,7 +103,7 @@ function Login() {
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          submit("/auth/login", { email, password, join_code: showJoin ? joinCode : "" });
+          submit("/auth/login", { email, password });
         }}
       >
         <label className="block text-sm font-medium text-slate-700">
@@ -129,40 +127,6 @@ function Login() {
           />
         </label>
 
-        {showJoin ? (
-          <label className="block text-sm font-medium text-slate-700">
-            <span className="flex justify-between">
-              Team invite code
-              <button
-                type="button"
-                onClick={() => {
-                  setShowJoin(false);
-                  setJoinCode("");
-                }}
-                className="font-normal text-slate-500 hover:underline"
-              >
-                Cancel
-              </button>
-            </span>
-            <input
-              className={`${inputClass} font-mono uppercase placeholder:font-sans placeholder:normal-case`}
-              value={joinCode}
-              maxLength={20}
-              onChange={(e) => setJoinCode(e.target.value)}
-              placeholder="8 letters and numbers, e.g. ABCD2345"
-              autoComplete="off"
-            />
-            <span className="mt-1 block text-xs font-normal text-slate-500">
-              Ask a teammate for the code in their top bar. You&apos;ll move into their team, and any leads you&apos;ve
-              claimed in your current team go back to it.
-            </span>
-          </label>
-        ) : (
-          <button type="button" onClick={() => setShowJoin(true)} className="text-sm font-medium text-indigo-600 hover:underline">
-            Joining a teammate&apos;s team? Enter an invite code
-          </button>
-        )}
-
         <Feedback error={error} info={info} />
         {unverified && (
           <button type="button" onClick={resend} disabled={busy} className="text-sm font-semibold text-indigo-600 hover:underline disabled:opacity-50">
@@ -171,7 +135,7 @@ function Login() {
         )}
 
         <button type="submit" disabled={busy || !email || !password} className={primaryButton}>
-          {busy ? "Please wait..." : showJoin && joinCode.trim() ? "Log in and join team" : "Log in"}
+          {busy ? "Please wait..." : "Log in"}
         </button>
         <WakeHint show={slow} />
       </form>

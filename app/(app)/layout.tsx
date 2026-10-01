@@ -165,7 +165,7 @@ function Header({ session }: { session: Session }) {
                 <button
                   type="button"
                   onClick={copyCode}
-                  title="Teammates enter this code when they sign up or log in"
+                  title="Teammates enter this code when they sign up"
                   className="rounded bg-white px-1.5 py-0.5 font-mono font-semibold text-indigo-700 hover:bg-indigo-50"
                 >
                   {copied ? "Copied ✓" : `Invite code ${team.joinCode}`}
