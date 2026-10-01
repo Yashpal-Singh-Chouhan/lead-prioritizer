@@ -1,12 +1,14 @@
 "use client";
-// /dashboard: the first screen. Every lead in one scannable table, so the salesperson knows who needs
-// attention within seconds. Filtering, sorting and searching happen in the database (GET /leads).
-// Pipeline numbers come from GET /stats, which the backend also calculates with SQL.
-import { useCallback, useEffect, useState } from "react";
+// /dashboard: the first screen. Every team lead in one scannable table, so the salesperson knows who
+// needs attention within seconds, and who is already working each lead. Filtering, sorting and
+// searching happen in the database (GET /leads). Pipeline numbers come from GET /stats (SQL too).
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { Lead, Priority, SortKey, Stats } from "@/lib/types";
+import { useRouter, useSearchParams } from "next/navigation";
+import type { ClaimView, Lead, Priority, SortKey, Stats } from "@/lib/types";
 import { api, PRIORITY_STYLES } from "@/lib/client";
 import { useLeads } from "@/lib/leads-context";
+import { ClaimButton, useMyId } from "@/components/Claim";
 
 const PAGE_SIZE = 25;
 const SORTS: { key: SortKey; label: string }[] = [
@@ -60,62 +62,104 @@ function Columns({ rows }: { rows: { label: string; count: number }[] }) {
   );
 }
 
-// One scannable row: priority + score, who, money & timing, what they want, what to do
+// The table layout, shared by the header and every row (the last column is claiming)
+const COLUMNS =
+  "lg:grid-cols-[92px_minmax(150px,1fr)_minmax(130px,0.8fr)_minmax(200px,1.5fr)_minmax(200px,1.4fr)_minmax(110px,130px)]";
+
+// One scannable row: priority + score, who, money & timing, what they want, what to do, who's on it
 function LeadRow({ lead }: { lead: Lead }) {
   const a = lead.analysis;
   const style = PRIORITY_STYLES[a.priority];
   return (
-    <Link
-      href={`/leads/${lead.id}`}
-      className="grid gap-3 border-b border-slate-100 px-4 py-3 transition last:border-0 hover:bg-indigo-50/40 lg:grid-cols-[92px_minmax(150px,1fr)_minmax(130px,0.8fr)_minmax(220px,1.7fr)_minmax(220px,1.5fr)] lg:items-center"
-    >
-      <div className="flex items-center gap-2 lg:flex-col lg:items-start lg:gap-1">
-        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${style.badge}`}>{style.label}</span>
-        <span className="text-lg font-extrabold leading-none text-slate-900">
-          {a.score}
-          <span className="text-xs font-medium text-slate-400">/100</span>
-        </span>
+    <div className={`grid gap-3 border-b border-slate-100 px-4 py-3 transition last:border-0 hover:bg-indigo-50/40 lg:items-center ${COLUMNS}`}>
+      {/* the row's text is one link to the lead; the claim button sits outside it */}
+      <Link href={`/leads/${lead.id}`} className="contents">
+        <div className="flex items-center gap-2 lg:flex-col lg:items-start lg:gap-1">
+          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${style.badge}`}>{style.label}</span>
+          <span className="text-lg font-extrabold leading-none text-slate-900">
+            {a.score}
+            <span className="text-xs font-medium text-slate-400">/100</span>
+          </span>
+        </div>
+        <div className="min-w-0">
+          <div className="truncate font-semibold text-slate-900">{lead.name}</div>
+          <div className="truncate text-xs text-slate-500">📍 {lead.location || "No location"}</div>
+          <div className="truncate text-xs text-slate-500">🏠 {lead.requirement || "No requirement"}</div>
+        </div>
+        <div className="text-xs text-slate-700">
+          <div>💰 {lead.budget || "Not given"}</div>
+          <div className="mt-0.5">⏱ {lead.timeline || "Not given"}</div>
+        </div>
+        <p className="line-clamp-2 text-xs text-slate-600">{a.summary}</p>
+        <div className="rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-900">
+          <p className="line-clamp-2">➜ {a.nextAction}</p>
+        </div>
+      </Link>
+      <div className="flex min-w-0">
+        <ClaimButton lead={lead} />
       </div>
-      <div className="min-w-0">
-        <div className="truncate font-semibold text-slate-900">{lead.name}</div>
-        <div className="truncate text-xs text-slate-500">📍 {lead.location || "No location"}</div>
-        <div className="truncate text-xs text-slate-500">🏠 {lead.requirement || "No requirement"}</div>
-      </div>
-      <div className="text-xs text-slate-700">
-        <div>💰 {lead.budget || "Not given"}</div>
-        <div className="mt-0.5">⏱ {lead.timeline || "Not given"}</div>
-      </div>
-      <p className="line-clamp-2 text-xs text-slate-600">{a.summary}</p>
-      <div className="rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-900">
-        <p className="line-clamp-2">➜ {a.nextAction}</p>
-      </div>
-    </Link>
+    </div>
   );
 }
 
+const VIEWS: ClaimView[] = ["all", "open", "mine"];
+const PRIORITIES: Priority[] = ["Hot", "Warm", "Cold"];
+
 export default function DashboardPage() {
-  const { loadDemo, busy: demoBusy, error: demoError } = useLeads();
+  // useSearchParams needs a Suspense boundary in production builds
+  return (
+    <Suspense fallback={<main className="mx-auto max-w-7xl px-4 py-6 text-sm text-slate-500">Loading dashboard...</main>}>
+      <Dashboard />
+    </Suspense>
+  );
+}
+
+function Dashboard() {
+  const { loadDemo, onLeadEvent, busy: demoBusy, error: demoError } = useLeads();
+  const me = useMyId();
+  const router = useRouter();
+  const params = useSearchParams();
+
+  // Filters live in the URL (/dashboard?view=open&priority=Hot), so Back from a lead returns to the
+  // same filtered list, and a filtered view can be bookmarked. Unknown values fall back to defaults.
+  const view = VIEWS.find((v) => v === params.get("view")) ?? "all";
+  const priority = PRIORITIES.find((p) => p === params.get("priority")) ?? "";
+  const sort = SORTS.find((s) => s.key === params.get("sort"))?.key ?? "score";
+  const query = (params.get("q") ?? "").slice(0, 80);
+
   const [stats, setStats] = useState<Stats | null>(null);
   const [rows, setRows] = useState<Lead[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [priority, setPriority] = useState<Priority | "">("");
-  const [sort, setSort] = useState<SortKey>("score");
-  const [search, setSearch] = useState("");
-  const [query, setQuery] = useState(""); // search text, applied after the user stops typing
+  const [search, setSearch] = useState(query);
 
+  // replace (not push): changing a filter shouldn't add a Back step for every click or keystroke
+  const setParam = useCallback(
+    (key: string, value: string) => {
+      const next = new URLSearchParams(params.toString());
+      if (value) next.set(key, value);
+      else next.delete(key);
+      const qs = next.toString();
+      router.replace(qs ? `/dashboard?${qs}` : "/dashboard", { scroll: false });
+    },
+    [params, router]
+  );
+
+  // apply the search text after the user stops typing
   useEffect(() => {
-    const t = setTimeout(() => setQuery(search.trim()), 300);
+    const t = setTimeout(() => {
+      if (search.trim() !== query) setParam("q", search.trim());
+    }, 300);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search, query, setParam]);
 
   const fetchRows = useCallback(
     (offset: number) => {
-      const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset), sort });
-      if (priority) params.set("priority", priority);
-      if (query) params.set("q", query);
-      api<{ items: Lead[]; total: number }>("GET", `/leads?${params}`)
+      const qs = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset), sort, view });
+      if (priority) qs.set("priority", priority);
+      if (query) qs.set("q", query);
+      api<{ items: Lead[]; total: number }>("GET", `/leads?${qs}`)
         .then((page) => {
           setRows((prev) => (offset === 0 ? page.items : [...prev, ...page.items]));
           setTotal(page.total);
@@ -124,7 +168,7 @@ export default function DashboardPage() {
         .catch((err: Error) => setError(err.message))
         .finally(() => setLoading(false));
     },
-    [priority, sort, query]
+    [priority, sort, query, view]
   );
 
   const fetchStats = useCallback(() => {
@@ -136,14 +180,48 @@ export default function DashboardPage() {
   useEffect(() => fetchRows(0), [fetchRows]);
   useEffect(fetchStats, [fetchStats]);
 
+  // Live updates: patch the changed row in place; reload the list when leads appear or disappear.
+  // Several events in a row (e.g. demo leads being added) cause just one reload.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const reloadSoon = (withRows: boolean) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (withRows) fetchRows(0);
+        fetchStats();
+      }, 400);
+    };
+    const stop = onLeadEvent((event) => {
+      if (event.type === "claimed" || event.type === "released" || event.type === "updated") {
+        const lead = event.lead;
+        const fits =
+          (view === "all" || (view === "open" ? !lead.claimedBy : lead.claimedBy?.id === me)) &&
+          (!priority || lead.analysis.priority === priority);
+        setRows((prev) => prev.flatMap((r) => (r.id !== lead.id ? [r] : fits ? [lead] : [])));
+        reloadSoon(false);
+      } else {
+        reloadSoon(true);
+      }
+    });
+    return () => {
+      stop();
+      clearTimeout(timer);
+    };
+  }, [onLeadEvent, fetchRows, fetchStats, view, priority, me]);
+
   async function handleLoadDemo() {
     await loadDemo();
     fetchStats();
     fetchRows(0);
   }
 
+  const viewTabs: { key: ClaimView; label: string; count: number | undefined }[] = [
+    { key: "all", label: "All team leads", count: stats?.total },
+    { key: "open", label: "Open to claim", count: stats?.byClaim.open },
+    { key: "mine", label: "My leads", count: stats?.byClaim.mine },
+  ];
   const chips: { key: Priority | ""; label: string; count: number | undefined; active: string }[] = [
-    { key: "", label: "All leads", count: stats?.total, active: "border-slate-900 bg-slate-900 text-white" },
+    { key: "", label: "All priorities", count: stats?.total, active: "border-slate-900 bg-slate-900 text-white" },
     { key: "Hot", label: PRIORITY_STYLES.Hot.label, count: stats?.byPriority.Hot, active: "border-red-500 bg-red-500 text-white" },
     { key: "Warm", label: PRIORITY_STYLES.Warm.label, count: stats?.byPriority.Warm, active: "border-amber-500 bg-amber-500 text-white" },
     { key: "Cold", label: PRIORITY_STYLES.Cold.label, count: stats?.byPriority.Cold, active: "border-sky-500 bg-sky-500 text-white" },
@@ -155,7 +233,7 @@ export default function DashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Lead dashboard</h1>
-          <p className="text-sm text-slate-500">Every lead is scored by AI. Work from the top of the list down.</p>
+          <p className="text-sm text-slate-500">Every lead is scored by AI. Claim an open lead and work from the top down.</p>
         </div>
         <Link href="/leads/new" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
           + New lead
@@ -169,7 +247,7 @@ export default function DashboardPage() {
       {empty ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-600">
           <p className="text-base font-semibold text-slate-900">No leads yet</p>
-          <p className="mt-1">Add your first lead, or load realistic demo leads to see the AI in action.</p>
+          <p className="mt-1">Add your team&apos;s first lead, or load realistic demo leads to see the AI in action.</p>
           <div className="mt-4 flex flex-wrap justify-center gap-3">
             <Link href="/leads/new" className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700">
               Add a lead
@@ -186,13 +264,29 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
+          {/* Whose leads: everyone's, the ones nobody has claimed yet, or the ones I'm working */}
+          <div className="flex flex-wrap gap-1 rounded-xl bg-slate-200/60 p-1 text-sm sm:w-fit">
+            {viewTabs.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setParam("view", t.key === "all" ? "" : t.key)}
+                className={`rounded-lg px-3.5 py-1.5 font-semibold transition ${
+                  view === t.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                {t.label} <span className="ml-1 opacity-70">{t.count ?? "–"}</span>
+              </button>
+            ))}
+          </div>
+
           {/* Priority chips double as the filter: one click shows only the hot leads */}
           <div className="flex flex-wrap items-center gap-2">
             {chips.map((c) => (
               <button
                 key={c.label}
                 type="button"
-                onClick={() => setPriority(c.key)}
+                onClick={() => setParam("priority", c.key)}
                 className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold transition ${
                   priority === c.key ? c.active : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
                 }`}
@@ -210,7 +304,7 @@ export default function DashboardPage() {
               />
               <select
                 value={sort}
-                onChange={(e) => setSort(e.target.value as SortKey)}
+                onChange={(e) => setParam("sort", e.target.value === "score" ? "" : e.target.value)}
                 aria-label="Sort leads"
                 className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
               >
@@ -224,18 +318,23 @@ export default function DashboardPage() {
           </div>
 
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="hidden border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 lg:grid lg:grid-cols-[92px_minmax(150px,1fr)_minmax(130px,0.8fr)_minmax(220px,1.7fr)_minmax(220px,1.5fr)] lg:gap-3">
+            <div
+              className={`hidden border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 lg:grid lg:gap-3 ${COLUMNS}`}
+            >
               <span>Priority</span>
               <span>Customer</span>
               <span>Budget · Timeline</span>
               <span>AI summary</span>
               <span>Recommended next action</span>
+              <span>Salesperson</span>
             </div>
             {rows.map((lead) => (
               <LeadRow key={lead.id} lead={lead} />
             ))}
             {!loading && rows.length === 0 && (
-              <p className="px-4 py-8 text-center text-sm text-slate-500">No leads match these filters.</p>
+              <p className="px-4 py-8 text-center text-sm text-slate-500">
+                {view === "mine" ? "You haven't claimed any leads matching these filters yet." : "No leads match these filters."}
+              </p>
             )}
             {loading && rows.length === 0 && (
               <p className="px-4 py-8 text-center text-sm text-slate-500">Loading leads... (a sleeping server can take up to a minute to wake)</p>

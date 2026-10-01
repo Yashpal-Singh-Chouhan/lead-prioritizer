@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// The bare address opens the dashboard (the app layout sends people to login first if needed)
+// The bare address opens the login page (it forwards to the dashboard if this tab is already logged in)
 export default function Home() {
-  redirect("/dashboard");
+  redirect("/login");
 }

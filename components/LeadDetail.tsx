@@ -6,6 +6,7 @@ import { PRIORITY_STYLES, whatsappNumber } from "@/lib/client";
 import LeadChat from "./LeadChat";
 import CallLogger from "./CallLogger";
 import SalesActionPlan from "./SalesActionPlan";
+import { ClaimBar, useMyId } from "./Claim";
 
 function Card({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
   return (
@@ -38,6 +39,10 @@ export default function LeadDetail({
   const style = PRIORITY_STYLES[a.priority];
   const waNumber = whatsappNumber(lead.phone ?? "");
   const [copied, setCopied] = useState(false);
+  const me = useMyId();
+  // only the salesperson who claimed the lead acts on it; everyone else gets a read-only view
+  const canWork = lead.claimedBy?.id === me;
+  const canDelete = lead.claimedBy ? canWork : lead.addedBy.id === me;
 
   async function copyReply() {
     await navigator.clipboard.writeText(a.suggestedResponse);
@@ -47,13 +52,18 @@ export default function LeadDetail({
 
   return (
     <div className="space-y-4">
+      <ClaimBar lead={lead} />
+
       {/* Header: who, how hot, why, and what to do next */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold text-slate-900">{lead.name}</h2>
             <p className="text-sm text-slate-500">{a.intent}</p>
-            {(lead.phone || lead.email) && (
+            {(lead.phone || lead.email) && !canWork && (
+              <p className="mt-2 text-xs text-slate-500">📞 Call and email buttons appear for the salesperson working this lead.</p>
+            )}
+            {(lead.phone || lead.email) && canWork && (
               <div className="mt-2 flex flex-wrap gap-2 text-sm">
                 {lead.phone && (
                   <a href={`tel:${lead.phone}`} className="rounded-lg border border-slate-300 px-2.5 py-1 font-medium text-slate-700 hover:bg-slate-50">
@@ -114,7 +124,7 @@ export default function LeadDetail({
         </div>
       </div>
 
-      <SalesActionPlan lead={lead} onChange={onChange} />
+      <SalesActionPlan lead={lead} onChange={onChange} canWork={canWork} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Customer information">
@@ -164,7 +174,7 @@ export default function LeadDetail({
 
       <Card title="Suggested response to customer">
         <p className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3">{a.suggestedResponse}</p>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className={`mt-3 flex-wrap gap-2 ${canWork ? "flex" : "hidden"}`}>
           <button type="button" onClick={copyReply} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700">
             {copied ? "Copied ✓" : "Copy Response"}
           </button>
@@ -178,19 +188,21 @@ export default function LeadDetail({
             {waNumber ? "Send on WhatsApp" : "Share on WhatsApp"}
           </a>
         </div>
-        <p className="mt-2 text-xs text-slate-400">Want it shorter, more assertive or in Hindi? Ask in the chat below.</p>
+        {canWork && <p className="mt-2 text-xs text-slate-400">Want it shorter, more assertive or in Hindi? Ask in the chat below.</p>}
       </Card>
 
-      <LeadChat lead={lead} onChange={onChange} />
-      <CallLogger lead={lead} onChange={onChange} />
+      <LeadChat lead={lead} onChange={onChange} canWork={canWork} />
+      <CallLogger lead={lead} onChange={onChange} canWork={canWork} />
 
-      <button
-        type="button"
-        onClick={() => confirm(`Delete ${lead.name}?`) && onDelete(lead.id)}
-        className="text-xs text-red-600 hover:underline"
-      >
-        Delete this lead
-      </button>
+      {canDelete && (
+        <button
+          type="button"
+          onClick={() => confirm(`Delete ${lead.name}?`) && onDelete(lead.id)}
+          className="text-xs text-red-600 hover:underline"
+        >
+          Delete this lead
+        </button>
+      )}
     </div>
   );
 }
