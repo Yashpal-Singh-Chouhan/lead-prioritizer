@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { Lead } from "@/lib/types";
 import { api } from "@/lib/client";
 
-export default function CallLogger({ lead, onChange }: { lead: Lead; onChange: (lead: Lead) => void }) {
+export default function CallLogger({ lead, onChange, canWork }: { lead: Lead; onChange: (lead: Lead) => void; canWork: boolean }) {
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -31,21 +31,27 @@ export default function CallLogger({ lead, onChange }: { lead: Lead; onChange: (
       <p className="mb-3 text-xs text-slate-600">
         Paste your call notes or the call transcript. AI re-scores the lead and rewrites the next action, the Sales Action Plan and the reply.
       </p>
-      <textarea
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        placeholder="e.g. Spoke for 10 min. Wife liked the floor plan but wants a park-facing unit. Asked for 5% discount. Visit booked Sunday 11am."
-        className="min-h-24 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none"
-      />
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-      <button
-        type="button"
-        onClick={logCall}
-        disabled={busy || !notes.trim()}
-        className="mt-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:bg-slate-300"
-      >
-        {busy ? "Updating lead..." : "Log call & re-score"}
-      </button>
+      {canWork ? (
+        <>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="e.g. Spoke for 10 min. Wife liked the floor plan but wants a park-facing unit. Asked for 5% discount. Visit booked Sunday 11am."
+            className="min-h-24 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none"
+          />
+          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+          <button
+            type="button"
+            onClick={logCall}
+            disabled={busy || !notes.trim()}
+            className="mt-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:bg-slate-300"
+          >
+            {busy ? "Updating lead..." : "Log call & re-score"}
+          </button>
+        </>
+      ) : (
+        <p className="rounded-lg bg-white px-3 py-2 text-sm text-slate-500">Only the salesperson working this lead can log calls. Past calls are listed below.</p>
+      )}
 
       {lead.calls.length > 0 && (
         <ul className="mt-4 space-y-2">

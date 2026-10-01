@@ -36,12 +36,13 @@ export default function LeadForm({
   onSubmit,
   busy,
 }: {
-  onSubmit: (lead: LeadInput) => Promise<boolean>;
+  onSubmit: (lead: LeadInput, claim: boolean) => Promise<boolean>;
   busy: boolean;
 }) {
   const [form, setForm] = useState<LeadInput>(EMPTY);
   const [errors, setErrors] = useState<LeadErrors>({});
   const [sample, setSample] = useState(0);
+  const [claim, setClaim] = useState(true); // e.g. your own walk-in or phone inquiry
 
   function update(field: keyof LeadInput, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -58,7 +59,7 @@ export default function LeadForm({
     const found = validateLead(form); // quick check in the browser; the server checks again
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-    const ok = await onSubmit(form);
+    const ok = await onSubmit(form, claim);
     if (ok) setForm(EMPTY);
   }
 
@@ -145,6 +146,14 @@ export default function LeadForm({
           Please fix {errorCount} field{errorCount > 1 ? "s" : ""} marked in red.
         </p>
       )}
+
+      <label className="mt-5 flex items-start gap-2 text-sm text-slate-700">
+        <input type="checkbox" checked={claim} onChange={(e) => setClaim(e.target.checked)} className="mt-0.5 h-4 w-4 accent-indigo-600" />
+        <span>
+          <span className="font-medium">I&apos;ll handle this lead myself</span>
+          <span className="block text-xs text-slate-500">Claims it for you right away. Untick to leave it open for anyone in your team.</span>
+        </span>
+      </label>
 
       <button
         type="submit"

@@ -1,33 +1,63 @@
 "use client";
-// /login: log in, sign up, or try the demo account in one click.
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { api } from "@/lib/client";
+// /login: log in, or try one of the two demo salespeople in one click.
+import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { api, ApiError, warmUp } from "@/lib/client";
 import { saveSession, useSession, type Session } from "@/lib/auth";
-
-const inputClass =
-  "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200";
+import AuthCard, { Feedback, inputClass, primaryButton, safeNext, useSlow, WakeHint } from "@/components/AuthCard";
 
 export default function LoginPage() {
+  // useSearchParams (for ?next=) needs a Suspense boundary in production builds
+  return (
+    <Suspense fallback={null}>
+      <Login />
+    </Suspense>
+  );
+}
+
+function Login() {
   const router = useRouter();
+  const next = safeNext(useSearchParams().get("next"));
   const { ready, session } = useSession();
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const [unverified, setUnverified] = useState(false);
+  const slow = useSlow(busy);
 
-  // already logged in? go straight to the dashboard
+  // already logged in (in this tab)? go straight on
   useEffect(() => {
-    if (ready && session) router.replace("/dashboard");
-  }, [ready, session, router]);
+    if (ready && session) router.replace(next);
+  }, [ready, session, router, next]);
+
+  // start waking the server while the person types
+  useEffect(warmUp, []);
 
   async function submit(path: string, body?: unknown) {
     setBusy(true);
     setError("");
+    setInfo("");
+    setUnverified(false);
     try {
-      saveSession(await api<Session>("POST", path, body)); // the layout effect above then redirects
+      saveSession(await api<Session>("POST", path, body)); // the effect above then redirects
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) setUnverified(true);
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resend() {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await api<{ message: string }>("POST", "/auth/resend-verification", { email });
+      setInfo(res.message);
+      setUnverified(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -35,88 +65,80 @@ export default function LoginPage() {
     }
   }
 
-  function handleSubmit() {
-    if (mode === "signup") {
-      if (name.trim().length < 2) return setError("Please enter your name.");
-      if (password.length < 8) return setError("Password must be at least 8 characters.");
-      submit("/auth/signup", { name, email, password });
-    } else {
-      submit("/auth/login", { email, password });
-    }
-  }
-
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-bold text-slate-900">Lead Prioritizer</h1>
-        <p className="mb-5 text-sm text-slate-500">AI-ranked leads, so you call the right people first.</p>
-
-        <button
-          type="button"
-          onClick={() => submit("/auth/demo")}
-          disabled={busy}
-          className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-        >
-          Try the demo account
-        </button>
-        <p className="mt-1 text-center text-xs text-slate-400">No sign-up needed. Shared demo data.</p>
-
-        <div className="my-5 flex items-center gap-3 text-xs text-slate-400">
-          <div className="h-px flex-1 bg-slate-200" /> or use your own account <div className="h-px flex-1 bg-slate-200" />
-        </div>
-
-        <div className="mb-4 grid grid-cols-2 rounded-lg bg-slate-100 p-1 text-sm">
-          {(["login", "signup"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => {
-                setMode(m);
-                setError("");
-              }}
-              className={`rounded-md py-1.5 font-medium ${mode === m ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
-            >
-              {m === "login" ? "Log in" : "Sign up"}
-            </button>
-          ))}
-        </div>
-
-        <div className="space-y-3">
-          {mode === "signup" && (
-            <label className="block text-sm font-medium text-slate-700">
-              Your name
-              <input className={inputClass} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} autoComplete="name" />
-            </label>
-          )}
-          <label className="block text-sm font-medium text-slate-700">
-            Email
-            <input className={inputClass} type="email" value={email} maxLength={254} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-          </label>
-          <label className="block text-sm font-medium text-slate-700">
-            Password
-            <input
-              className={inputClass}
-              type="password"
-              value={password}
-              maxLength={72}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-              autoComplete={mode === "signup" ? "new-password" : "current-password"}
-            />
-          </label>
-        </div>
-
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={busy || !email || !password}
-          className="mt-4 w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:bg-slate-300"
-        >
-          {busy ? "Please wait..." : mode === "login" ? "Log in" : "Create account"}
-        </button>
+    <AuthCard
+      title="Log in"
+      subtitle="AI-ranked leads, so your team calls the right people first."
+      footer={
+        <>
+          New here?{" "}
+          <Link href="/signup" className="font-semibold text-indigo-600 hover:underline">
+            Create an account
+          </Link>
+        </>
+      }
+    >
+      <div className="grid grid-cols-2 gap-2">
+        {(["a", "b"] as const).map((who) => (
+          <button
+            key={who}
+            type="button"
+            onClick={() => submit("/auth/demo", { who })}
+            disabled={busy}
+            className="rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            Demo salesperson {who.toUpperCase()}
+          </button>
+        ))}
       </div>
-    </main>
+      <p className="mt-1.5 text-center text-xs text-slate-400">
+        No sign-up needed. Open A and B in two tabs to watch claims sync live.
+      </p>
+
+      <div className="my-5 flex items-center gap-3 text-xs text-slate-400">
+        <div className="h-px flex-1 bg-slate-200" /> or use your own account <div className="h-px flex-1 bg-slate-200" />
+      </div>
+
+      <form
+        className="space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit("/auth/login", { email, password });
+        }}
+      >
+        <label className="block text-sm font-medium text-slate-700">
+          Email
+          <input className={inputClass} type="email" value={email} maxLength={254} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+        </label>
+        <label className="block text-sm font-medium text-slate-700">
+          <span className="flex justify-between">
+            Password
+            <Link href="/forgot-password" className="font-normal text-indigo-600 hover:underline">
+              Forgot password?
+            </Link>
+          </span>
+          <input
+            className={inputClass}
+            type="password"
+            value={password}
+            maxLength={72}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+          />
+        </label>
+
+        <Feedback error={error} info={info} />
+        {unverified && (
+          <button type="button" onClick={resend} disabled={busy} className="text-sm font-semibold text-indigo-600 hover:underline disabled:opacity-50">
+            Send me a new confirmation link
+          </button>
+        )}
+
+        <button type="submit" disabled={busy || !email || !password} className={primaryButton}>
+          {busy ? "Please wait..." : "Log in"}
+        </button>
+        <WakeHint show={slow} />
+      </form>
+    </AuthCard>
   );
 }

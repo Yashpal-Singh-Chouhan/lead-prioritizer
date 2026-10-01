@@ -5,6 +5,12 @@ import { clearSession, readSession } from "./auth";
 // Where our FastAPI backend lives. Set NEXT_PUBLIC_API_URL in .env.local (locally) or in Vercel.
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
+// Pings the server without waiting for the answer. The login page calls this on open, so a sleeping
+// free-tier server starts waking up while the person is still typing their password.
+export function warmUp() {
+  fetch(`${API_URL}/healthz`, { cache: "no-store" }).catch(() => {});
+}
+
 // An error that remembers the HTTP status code (e.g. 404 = not found, 401 = not logged in)
 export class ApiError extends Error {
   constructor(message: string, public status: number) {

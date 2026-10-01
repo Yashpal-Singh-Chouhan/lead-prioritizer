@@ -23,4 +23,18 @@ ALLOWED_ORIGINS = [
 # Secret used to sign login tokens. MUST be set to a long random value in production.
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-only-secret-change-me")
 TOKEN_HOURS = int(os.getenv("TOKEN_HOURS", "12"))
+
+# Where the website lives: email links (verify email, reset password) point here
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+
+# Email sending through Brevo's HTTP API (free tier: 300 emails/day). Without a key, emails are
+# printed to the server console instead, which is handy for local development.
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
+EMAIL_FROM = os.getenv("EMAIL_FROM", "")  # must be a sender address verified in Brevo
+EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "Lead Prioritizer")
+
+# Two shared demo salespeople in one demo team, so reviewers can watch a claim sync live
 DEMO_EMAIL = "demo@leadprioritizer.app"
+DEMO_EMAIL_B = "demo-b@leadprioritizer.app"
+DEMO_ACCOUNTS = {"a": (DEMO_EMAIL, "Demo Salesperson A"), "b": (DEMO_EMAIL_B, "Demo Salesperson B")}
+DEMO_TEAM_ID = "demo"

@@ -1,7 +1,9 @@
 "use client";
-// The left-hand list: every saved lead, grouped Hot / Warm / Cold and sorted by score.
+// The left-hand list: every team lead, grouped Hot / Warm / Cold and sorted by score,
+// with who is working each one.
 import type { Lead, Priority } from "@/lib/types";
 import { PRIORITY_STYLES, SAMPLE_LEADS } from "@/lib/client";
+import { ClaimStatus } from "./Claim";
 
 const GROUPS: Priority[] = ["Hot", "Warm", "Cold"];
 
@@ -62,6 +64,9 @@ export default function LeadList({
                       <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-bold ${PRIORITY_STYLES[group].badge}`}>
                         {lead.analysis.score}
                       </span>
+                    </div>
+                    <div className="mt-1.5 flex min-w-0">
+                      <ClaimStatus lead={lead} />
                     </div>
                     <p className="mt-1 line-clamp-2 text-xs text-slate-600">{lead.analysis.intent}</p>
                     <p className="mt-1 truncate text-xs text-slate-400">

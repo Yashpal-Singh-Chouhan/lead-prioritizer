@@ -63,9 +63,18 @@ export interface CallLog {
   newScore: number;
 }
 
-// A saved lead = the form input + the AI analysis + chat + call history
+export interface Person {
+  id: string;
+  name: string;
+}
+
+// A saved lead = the form input + the AI analysis + chat + call history.
+// Leads belong to a team; claimedBy is the one salesperson working it (null = open for anyone).
 export interface Lead extends LeadInput {
   id: string;
+  addedBy: Person;
+  claimedBy: Person | null;
+  claimedAt: string | null;
   createdAt: string;
   analysis: Analysis;
   chat: ChatMessage[];
@@ -76,6 +85,7 @@ export interface Lead extends LeadInput {
 export interface Stats {
   total: number;
   avgScore: number;
+  byClaim: { open: number; mine: number };
   byPriority: Record<Priority, number>;
   byTimeline: { label: string; count: number }[];
   scoreBuckets: { label: string; count: number }[];
@@ -84,3 +94,10 @@ export interface Stats {
 }
 
 export type SortKey = "score" | "newest" | "urgent";
+export type ClaimView = "all" | "open" | "mine";
+
+// A live update pushed by the server when a teammate changes a lead ("resync" = we reconnected)
+export type LeadEvent =
+  | { type: "created" | "claimed" | "released" | "updated"; actor: Person; lead: Lead }
+  | { type: "deleted"; actor: Person; leadId: string }
+  | { type: "resync" };

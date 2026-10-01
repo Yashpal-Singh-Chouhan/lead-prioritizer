@@ -46,6 +46,7 @@ class LeadIn(BaseModel):
     budget: str = Field(max_length=60)
     timeline: Literal[TIMELINES]  # only these exact values are accepted
     message: str = Field(max_length=2000)
+    claim: bool = False  # true = the person adding the lead also claims it (e.g. their own walk-in)
 
     @field_validator("name")
     @classmethod

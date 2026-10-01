@@ -37,7 +37,15 @@ function Step({ n, title, when, children }: { n: number; title: string; when: st
   );
 }
 
-export default function SalesActionPlan({ lead, onChange }: { lead: Lead; onChange: (lead: Lead) => void }) {
+export default function SalesActionPlan({
+  lead,
+  onChange,
+  canWork,
+}: {
+  lead: Lead;
+  onChange: (lead: Lead) => void;
+  canWork: boolean;
+}) {
   const plan = lead.analysis.actionPlan;
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -83,7 +91,9 @@ export default function SalesActionPlan({ lead, onChange }: { lead: Lead; onChan
       {!plan ? (
         <div className="rounded-xl bg-white p-4 text-sm text-slate-700">
           <p>This lead was saved before action plans existed.</p>
+          {!canWork && <p className="mt-1 text-slate-500">The salesperson working this lead can generate one.</p>}
           <button
+            hidden={!canWork}
             type="button"
             onClick={generate}
             disabled={busy}
