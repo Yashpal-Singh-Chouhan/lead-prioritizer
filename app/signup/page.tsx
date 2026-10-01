@@ -136,7 +136,7 @@ export default function SignupPage() {
             {(
               [
                 ["create", "Start a new team"],
-                ["join", "Join my team"],
+                ["join", "Join the team"],
               ] as const
             ).map(([mode, label]) => (
               <button
